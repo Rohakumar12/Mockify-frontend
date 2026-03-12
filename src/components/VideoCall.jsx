@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Peer from "peerjs";
 
 const VideoCall = () => {
@@ -10,27 +10,47 @@ const VideoCall = () => {
   const peerRef = useRef(null);
   const currentCall = useRef(null);
   const localStream = useRef(null);
-
-  // These are callback refs — they fire immediately when the DOM node mounts
-  const localVideoRef = useCallback(
-    (node) => {
-      if (node && localStream.current) {
-        node.srcObject = localStream.current;
-      }
-    },
-    [inCall],
-  );
-
-  const remoteVideoRef = useCallback(
-    (node) => {
-      if (node && remoteStream.current) {
-        node.srcObject = remoteStream.current;
-      }
-    },
-    [inCall],
-  );
-
   const remoteStream = useRef(null);
+
+  // Simple useRef for video elements
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+
+  // Whenever inCall becomes true, attach streams to video elements
+  useEffect(() => {
+    if (!inCall) return;
+
+    // Small timeout ensures video elements are in the DOM
+    const timer = setTimeout(() => {
+      if (localVideoRef.current && localStream.current) {
+        localVideoRef.current.srcObject = localStream.current;
+        localVideoRef.current.play().catch(() => {});
+      }
+      if (remoteVideoRef.current && remoteStream.current) {
+        remoteVideoRef.current.srcObject = remoteStream.current;
+        remoteVideoRef.current.play().catch(() => {});
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [inCall]);
+
+  // Also attach remote stream as soon as it arrives (even mid-call)
+  const attachRemoteStream = (stream) => {
+    remoteStream.current = stream;
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = stream;
+      remoteVideoRef.current.play().catch(() => {});
+    }
+  };
+
+  const attachLocalStream = (stream) => {
+    localStream.current = stream;
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = stream;
+      localVideoRef.current.play().catch(() => {});
+    }
+  };
 
   useEffect(() => {
     const peer = new Peer(undefined, {
@@ -52,13 +72,14 @@ const VideoCall = () => {
           video: true,
           audio: true,
         });
-        localStream.current = stream;
+
+        attachLocalStream(stream);
         call.answer(stream);
         currentCall.current = call;
 
         call.on("stream", (remote) => {
-          remoteStream.current = remote;
-          setInCall(true); // triggers re-render → callback refs fire with streams ready
+          attachRemoteStream(remote);
+          setInCall(true);
         });
 
         call.on("close", stopCall);
@@ -83,14 +104,15 @@ const VideoCall = () => {
         video: true,
         audio: true,
       });
-      localStream.current = stream;
+
+      attachLocalStream(stream);
 
       const call = peerRef.current.call(remotePeerId.trim(), stream);
       currentCall.current = call;
 
       call.on("stream", (remote) => {
-        remoteStream.current = remote;
-        setInCall(true); // triggers re-render → callback refs fire
+        attachRemoteStream(remote);
+        setInCall(true);
       });
 
       call.on("close", stopCall);
@@ -110,6 +132,8 @@ const VideoCall = () => {
     localStream.current?.getTracks().forEach((t) => t.stop());
     localStream.current = null;
     remoteStream.current = null;
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     setInCall(false);
   };
 
@@ -140,7 +164,7 @@ const VideoCall = () => {
         </div>
       </div>
 
-      {/* Input + Call button (always visible so you can call even while viewing) */}
+      {/* Input + Call button */}
       {!inCall && (
         <div className="flex flex-col gap-2 mb-2">
           <input
@@ -155,12 +179,7 @@ const VideoCall = () => {
             disabled={!peerId || !remotePeerId.trim()}
             className="w-full py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-semibold text-sm transition-all flex items-center justify-center gap-2"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
             </svg>
             Video Call
@@ -168,11 +187,11 @@ const VideoCall = () => {
         </div>
       )}
 
-      {/* Video windows — only shown when in call */}
+      {/* Video windows */}
       {inCall && (
         <>
           <div className="relative mb-2">
-            {/* Remote video - big */}
+            {/* Remote video */}
             <div className="w-full h-36 bg-gray-800 rounded-lg overflow-hidden">
               <video
                 ref={remoteVideoRef}
@@ -184,7 +203,7 @@ const VideoCall = () => {
                 Remote
               </span>
             </div>
-            {/* Local video - picture in picture */}
+            {/* Local PiP */}
             <div className="absolute bottom-2 right-2 w-20 h-14 bg-gray-700 rounded-lg overflow-hidden border border-gray-600">
               <video
                 ref={localVideoRef}
