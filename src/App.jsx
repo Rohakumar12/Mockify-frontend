@@ -5,6 +5,7 @@ import Form from "./components/Form";
 import Sidebar from "./components/Sidebar";
 import Editor from "@monaco-editor/react";
 import Whiteboard from "./components/Whiteboard";
+import AICodeAssistant from "./components/AICodeAssistant";
 
 const App = () => {
   const [joined, setJoined] = useState(false);
@@ -17,6 +18,7 @@ const App = () => {
   const [users, setUsers] = useState([]);
   const [typing, setTyping] = useState([]);
   const [showWhiteBoard, setShowWhiteBoard] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
 
   const handleJoin = (roomId, userName) => {
     socket.emit("join", { roomId, userName });
@@ -45,20 +47,23 @@ const App = () => {
           headers: {
             "Content-Type": "application/json",
             "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com",
-            "X-RapidAPI-Key": "f9eb67ee20mshbc9cb68f5e49379p1c234fjsne0d501c9daed",
+            "X-RapidAPI-Key":
+              "f9eb67ee20mshbc9cb68f5e49379p1c234fjsne0d501c9daed",
           },
           body: JSON.stringify({
             language_id: getLanguageId(language),
             source_code: code,
             stdin: input,
           }),
-        }
+        },
       );
       const data = await response.json();
       if (response.ok) {
         setOutput(data.stdout || data.stderr || "No output produced.");
       } else {
-        setOutput(`Error: ${data.message || "An error occurred while executing the code."}`);
+        setOutput(
+          `Error: ${data.message || "An error occurred while executing the code."}`,
+        );
       }
     } catch (error) {
       setOutput("An error occurred while executing the code.");
@@ -77,7 +82,7 @@ const App = () => {
       setTyping((prev) => [...prev, typingUser]);
       setTimeout(
         () => setTyping((prev) => prev.filter((u) => u !== typingUser)),
-        3000
+        3000,
       );
     });
 
@@ -124,13 +129,65 @@ const App = () => {
               socket={socket}
             />
             <div className="flex flex-1 overflow-hidden">
-              <div className="w-full p-4 flex flex-col gap-4 overflow-y-auto">
+              <div
+                className={`${
+                  showWhiteBoard
+                    ? "w-full"
+                    : showAIAssistant
+                      ? "w-2/3"
+                      : "w-full"
+                } p-4 flex flex-col gap-4 relative overflow-y-auto`}
+              >
+                {!showWhiteBoard && (
+                  <div className="absolute top-2 right-4 z-10">
+                    <button
+                      onClick={() => setShowAIAssistant(!showAIAssistant)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white font-medium shadow-lg transition-all"
+                    >
+                      {showAIAssistant ? (
+                        <>
+                          <span>Hide AI Assistant</span>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-5 w-5"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </>
+                      ) : (
+                        <>
+                          <span>Show AI Assistant</span>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-5 w-5"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
                 {showWhiteBoard ? (
                   <Whiteboard socket={socket} roomId={roomId} />
                 ) : (
                   <>
-                    <p className="text-lg text-center mt-4">
-                      Hello, <span className="font-bold">{userName}</span>! Start coding below.
+                    <p className="text-lg text-center mt-12">
+                      Hello, <span className="font-bold">{userName}</span>!
+                      Start coding below.
                     </p>
                     <Editor
                       language={language}
@@ -160,12 +217,20 @@ const App = () => {
                     <div
                       className="w-full p-2 mt-1 bg-gray-800 rounded-lg text-white h-auto"
                       dangerouslySetInnerHTML={{
-                        __html: (output || "The output will be displayed here...").replace(/\n/g, "<br />"),
+                        __html: (
+                          output || "The output will be displayed here..."
+                        ).replace(/\n/g, "<br />"),
                       }}
                     />
                   </>
                 )}
               </div>
+
+              {!showWhiteBoard && showAIAssistant && (
+                <div className="w-1/3 border-l border-gray-700 p-4 bg-gray-900 overflow-y-auto">
+                  <AICodeAssistant editorContent={code} />
+                </div>
+              )}
             </div>
           </div>
         )}

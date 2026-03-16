@@ -1,4 +1,3 @@
-
 import React from "react";
 import PropTypes from "prop-types";
 import RoomInfo from "./RoomInfo";
@@ -29,48 +28,50 @@ const Sidebar = ({
 
   return (
     <div
-      className="sticky top-0 w-full sm:w-1/3 md:w-1/4 lg:w-1/5 p-4 bg-gradient-to-r from-gray-800 via-gray-900 to-black text-white rounded-lg shadow-xl h-screen flex flex-col justify-between overflow-y-auto"
+      className="sticky top-0 w-full sm:w-1/3 md:w-1/4 lg:w-1/5 bg-gradient-to-r from-gray-800 via-gray-900 to-black text-white rounded-lg shadow-xl h-screen flex flex-col"
       role="complementary"
       aria-label="Sidebar Navigation"
     >
-      {/* Room Info */}
-      <RoomInfo roomId={roomId} />
+      {/* Scrollable content area — everything except Leave Room */}
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+        {/* Room Info */}
+        <RoomInfo roomId={roomId} />
 
-      {/* User List */}
-      <UserList users={users} typing={typing} />
+        {/* User List */}
+        <UserList users={users} typing={typing} />
 
-      {/* Language Selector */}
-      <LanguageSelector
-        language={language}
-        setLanguage={setLanguage}
-        roomId={roomId}
-      />
+        {/* Language Selector */}
+        <LanguageSelector
+          language={language}
+          setLanguage={setLanguage}
+          roomId={roomId}
+        />
 
-      {/* Whiteboard Button */}
-      <button
-        onClick={toggleWhiteboard}
-        className="w-full mt-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-center font-semibold shadow-lg"
-      >
-        {showWhiteBoard ? "Close Whiteboard" : "Open Whiteboard"}
-      </button>
+        {/* Whiteboard Button */}
+        <button
+          onClick={toggleWhiteboard}
+          className="w-full py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-center font-semibold shadow-lg"
+        >
+          {showWhiteBoard ? "Close Whiteboard" : "Open Whiteboard"}
+        </button>
 
-      {/* Voice Call */}
-      <VoiceChat roomId={roomId} userName={userName} socket={socket} />
+        {/* Voice Call */}
+        <VoiceChat roomId={roomId} userName={userName} socket={socket} />
 
-      {/* Video Call - Peer ID based */}
-      <VideoCall />
+        {/* Video Call */}
+        <VideoCall />
+      </div>
 
-      {/* Spacer */}
-      <div className="flex-grow"></div>
-
-      {/* Leave Room */}
-      <LeaveRoom
-        setJoined={setJoined}
-        setUserName={setUserName}
-        setRoomId={setRoomId}
-        setCode={setCode}
-        setLanguage={setLanguage}
-      />
+      {/* Leave Room — always pinned at bottom, never hidden */}
+      <div className="p-4 border-t border-gray-700 flex-shrink-0">
+        <LeaveRoom
+          setJoined={setJoined}
+          setUserName={setUserName}
+          setRoomId={setRoomId}
+          setCode={setCode}
+          setLanguage={setLanguage}
+        />
+      </div>
     </div>
   );
 };
