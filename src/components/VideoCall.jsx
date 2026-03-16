@@ -10,8 +10,8 @@ export default function VideoCall() {
 
   const peerRef = useRef(null);
   const callRef = useRef(null);
-  const localStream = useRef(null); // my camera stream
-  const remoteStream = useRef(null); // their stream
+  const localStream = useRef(null);
+  const remoteStream = useRef(null);
   const myVideo = useRef(null);
   const theirVideo = useRef(null);
 
@@ -32,20 +32,27 @@ export default function VideoCall() {
     };
   }, []);
 
-  // ── Re-attach streams whenever status becomes "incall" ──
-  // This fixes the black screen: video elements may not exist yet
-  // when srcObject is first assigned, so we retry on every render.
+  // ── Attach streams every time status becomes "incall" ──────────
+  // Runs for BOTH caller and receiver — guarantees videos show up
   useEffect(() => {
     if (status !== "incall") return;
 
-    if (myVideo.current && localStream.current) {
-      myVideo.current.srcObject = localStream.current;
-    }
-    if (theirVideo.current && remoteStream.current) {
-      theirVideo.current.srcObject = remoteStream.current;
-    }
+    // Small delay to ensure video elements are rendered
+    const timer = setTimeout(() => {
+      if (myVideo.current && localStream.current) {
+        myVideo.current.srcObject = localStream.current;
+        myVideo.current.play().catch(() => {});
+      }
+      if (theirVideo.current && remoteStream.current) {
+        theirVideo.current.srcObject = remoteStream.current;
+        theirVideo.current.play().catch(() => {});
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, [status]);
 
+  // ── Get camera ─────────────────────────────────────────────────
   const getCamera = async () => {
     if (localStream.current) return true;
     try {
@@ -61,16 +68,26 @@ export default function VideoCall() {
     }
   };
 
+  // ── Attach remote stream + trigger re-render ───────────────────
   const showRemote = (stream) => {
     remoteStream.current = stream;
-    // Attach immediately if refs are ready
-    if (theirVideo.current) theirVideo.current.srcObject = stream;
-    if (myVideo.current && localStream.current)
+
+    // Try attaching immediately
+    if (theirVideo.current) {
+      theirVideo.current.srcObject = stream;
+      theirVideo.current.play().catch(() => {});
+    }
+    // Also attach local (important for the RECEIVER side)
+    if (myVideo.current && localStream.current) {
       myVideo.current.srcObject = localStream.current;
-    setStatus("incall"); // triggers useEffect above as a fallback
+      myVideo.current.play().catch(() => {});
+    }
+
+    setStatus("incall"); // triggers useEffect as a safety fallback
     setIncomingCall(null);
   };
 
+  // ── End call ───────────────────────────────────────────────────
   const endCall = () => {
     callRef.current?.close();
     callRef.current = null;
@@ -80,6 +97,7 @@ export default function VideoCall() {
     setStatus("ready");
   };
 
+  // ── Caller starts the call ─────────────────────────────────────
   const startCall = async () => {
     if (!theirId.trim() || !peerRef.current) return;
     const ok = await getCamera();
@@ -91,16 +109,26 @@ export default function VideoCall() {
     c.on("close", endCall);
   };
 
+  // ── Receiver accepts the call ──────────────────────────────────
   const acceptCall = async () => {
-    const ok = await getCamera();
+    const ok = await getCamera(); // get camera FIRST
     if (!ok) return;
+
     const c = incomingCall.call;
     callRef.current = c;
+
+    // Answer with our local stream so caller sees us
     c.answer(localStream.current);
-    c.on("stream", showRemote);
+
+    // When caller's stream arrives → show both videos
+    c.on("stream", (stream) => {
+      showRemote(stream); // this handles both remote + local display
+    });
+
     c.on("close", endCall);
   };
 
+  // ── Receiver declines ──────────────────────────────────────────
   const declineCall = () => {
     incomingCall?.call.close();
     setIncomingCall(null);
@@ -170,7 +198,7 @@ export default function VideoCall() {
         </div>
       )}
 
-      {/* Videos — rendered first so refs exist, hidden until incall */}
+      {/* Always in DOM so refs are always valid */}
       <div
         style={{ display: status === "incall" ? "flex" : "none" }}
         className="flex-col gap-2 mb-2"
