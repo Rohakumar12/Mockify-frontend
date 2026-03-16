@@ -2,29 +2,24 @@ import React, { useEffect, useRef, useState } from "react";
 import Peer from "peerjs";
 
 export default function VideoCall() {
-  const [myId, setMyId] = useState("");
+  const [myId,    setMyId]    = useState("");
   const [theirId, setTheirId] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [status, setStatus] = useState("idle");
+  const [copied,  setCopied]  = useState(false);
+  const [status,  setStatus]  = useState("idle");
   const [incomingCall, setIncomingCall] = useState(null);
 
-  const peerRef = useRef(null);
-  const callRef = useRef(null);
-  const localStream = useRef(null);
+  const peerRef      = useRef(null);
+  const callRef      = useRef(null);
+  const localStream  = useRef(null);
   const remoteStream = useRef(null);
-  const myVideo = useRef(null);
-  const theirVideo = useRef(null);
+  const myVideo      = useRef(null);
+  const theirVideo   = useRef(null);
 
   useEffect(() => {
     const peer = new Peer();
     peerRef.current = peer;
-    peer.on("open", (id) => {
-      setMyId(id);
-      setStatus("ready");
-    });
-    peer.on("call", (call) => {
-      setIncomingCall({ call, name: call.peer.slice(0, 8) });
-    });
+    peer.on("open", (id) => { setMyId(id); setStatus("ready"); });
+    peer.on("call", (call) => { setIncomingCall({ call, name: call.peer.slice(0, 8) }); });
     peer.on("error", (err) => console.error("Peer:", err));
     return () => {
       localStream.current?.getTracks().forEach((t) => t.stop());
@@ -56,10 +51,7 @@ export default function VideoCall() {
   const getCamera = async () => {
     if (localStream.current) return true;
     try {
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localStream.current = s;
       return true;
     } catch {
@@ -91,9 +83,14 @@ export default function VideoCall() {
   const endCall = () => {
     callRef.current?.close();
     callRef.current = null;
+
+    // Stop all camera/mic tracks — this turns OFF the camera indicator
+    localStream.current?.getTracks().forEach((t) => t.stop());
+    localStream.current = null; // reset so getCamera() works on next call
+
     remoteStream.current = null;
     if (theirVideo.current) theirVideo.current.srcObject = null;
-    if (myVideo.current) myVideo.current.srcObject = null;
+    if (myVideo.current)    myVideo.current.srcObject    = null;
     setStatus("ready");
   };
 
@@ -106,7 +103,7 @@ export default function VideoCall() {
     const c = peerRef.current.call(theirId.trim(), localStream.current);
     callRef.current = c;
     c.on("stream", showRemote);
-    c.on("close", endCall);
+    c.on("close",  endCall);
   };
 
   // ── Receiver accepts the call ──────────────────────────────────
@@ -142,27 +139,19 @@ export default function VideoCall() {
 
   return (
     <div className="mt-3 relative">
+
       {status === "no-camera" && (
         <div className="bg-red-900/40 border border-red-500/40 rounded-lg p-3 mb-2">
-          <p className="text-red-400 text-xs">
-            ❌ Camera/mic blocked. Allow in browser settings and refresh.
-          </p>
+          <p className="text-red-400 text-xs">❌ Camera/mic blocked. Allow in browser settings and refresh.</p>
         </div>
       )}
 
       {myId && (
         <div className="bg-gray-800 rounded-lg p-3 mb-2">
-          <p className="text-xs text-gray-400 mb-1 uppercase tracking-widest font-semibold">
-            Your Video ID
-          </p>
+          <p className="text-xs text-gray-400 mb-1 uppercase tracking-widest font-semibold">Your Video ID</p>
           <div className="flex items-center gap-2">
-            <p className="text-xs text-green-400 font-mono truncate flex-1">
-              {myId}
-            </p>
-            <button
-              onClick={copyId}
-              className="text-xs px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-white flex-shrink-0"
-            >
+            <p className="text-xs text-green-400 font-mono truncate flex-1">{myId}</p>
+            <button onClick={copyId} className="text-xs px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-white flex-shrink-0">
               {copied ? "✓" : "Copy"}
             </button>
           </div>
@@ -192,17 +181,13 @@ export default function VideoCall() {
       {status === "calling" && (
         <div className="w-full py-2 mb-2 bg-yellow-600 rounded-lg text-white text-sm text-center">
           📞 Calling...
-          <button onClick={endCall} className="ml-3 text-xs underline">
-            Cancel
-          </button>
+          <button onClick={endCall} className="ml-3 text-xs underline">Cancel</button>
         </div>
       )}
 
       {/* Always in DOM so refs are always valid */}
-      <div
-        style={{ display: status === "incall" ? "flex" : "none" }}
-        className="flex-col gap-2 mb-2"
-      >
+      <div style={{ display: status === "incall" ? "flex" : "none" }} className="flex-col gap-2 mb-2">
+
         {/* Remote */}
         <div className="w-full rounded-lg overflow-hidden bg-black border border-gray-600">
           <div className="px-2 py-1 bg-gray-800 flex items-center gap-2">
@@ -213,12 +198,7 @@ export default function VideoCall() {
             ref={theirVideo}
             autoPlay
             playsInline
-            style={{
-              width: "100%",
-              height: "160px",
-              objectFit: "cover",
-              display: "block",
-            }}
+            style={{ width: "100%", height: "160px", objectFit: "cover", display: "block" }}
           />
         </div>
 
@@ -233,21 +213,14 @@ export default function VideoCall() {
             autoPlay
             muted
             playsInline
-            style={{
-              width: "100%",
-              height: "160px",
-              objectFit: "cover",
-              display: "block",
-            }}
+            style={{ width: "100%", height: "160px", objectFit: "cover", display: "block" }}
           />
         </div>
+
       </div>
 
       {status === "incall" && (
-        <button
-          onClick={endCall}
-          className="w-full py-2 bg-red-500 hover:bg-red-600 rounded-lg text-white font-semibold text-sm"
-        >
+        <button onClick={endCall} className="w-full py-2 bg-red-500 hover:bg-red-600 rounded-lg text-white font-semibold text-sm">
           📵 End Call
         </button>
       )}
@@ -256,25 +229,11 @@ export default function VideoCall() {
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm rounded-lg flex items-center justify-center">
           <div className="bg-gray-800 border border-gray-600 rounded-xl p-5 text-center shadow-2xl">
             <div className="text-3xl mb-2 animate-bounce">📞</div>
-            <p className="text-white font-semibold text-sm">
-              Incoming video call
-            </p>
-            <p className="text-gray-400 text-xs mt-1 mb-4 font-mono">
-              {incomingCall.name}...
-            </p>
+            <p className="text-white font-semibold text-sm">Incoming video call</p>
+            <p className="text-gray-400 text-xs mt-1 mb-4 font-mono">{incomingCall.name}...</p>
             <div className="flex gap-2">
-              <button
-                onClick={declineCall}
-                className="flex-1 bg-red-500/20 border border-red-500/50 text-red-400 text-xs font-semibold rounded-lg py-2"
-              >
-                Decline
-              </button>
-              <button
-                onClick={acceptCall}
-                className="flex-1 bg-green-500/20 border border-green-500/50 text-green-400 text-xs font-semibold rounded-lg py-2"
-              >
-                Accept
-              </button>
+              <button onClick={declineCall} className="flex-1 bg-red-500/20 border border-red-500/50 text-red-400 text-xs font-semibold rounded-lg py-2">Decline</button>
+              <button onClick={acceptCall} className="flex-1 bg-green-500/20 border border-green-500/50 text-green-400 text-xs font-semibold rounded-lg py-2">Accept</button>
             </div>
           </div>
         </div>
