@@ -10,7 +10,8 @@ export default function VideoCall() {
 
   const peerRef = useRef(null);
   const callRef = useRef(null);
-  const streamRef = useRef(null);
+  const localStream = useRef(null); // my camera stream
+  const remoteStream = useRef(null); // their stream
   const myVideo = useRef(null);
   const theirVideo = useRef(null);
 
@@ -26,20 +27,33 @@ export default function VideoCall() {
     });
     peer.on("error", (err) => console.error("Peer:", err));
     return () => {
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      localStream.current?.getTracks().forEach((t) => t.stop());
       peer.destroy();
     };
   }, []);
 
+  // ── Re-attach streams whenever status becomes "incall" ──
+  // This fixes the black screen: video elements may not exist yet
+  // when srcObject is first assigned, so we retry on every render.
+  useEffect(() => {
+    if (status !== "incall") return;
+
+    if (myVideo.current && localStream.current) {
+      myVideo.current.srcObject = localStream.current;
+    }
+    if (theirVideo.current && remoteStream.current) {
+      theirVideo.current.srcObject = remoteStream.current;
+    }
+  }, [status]);
+
   const getCamera = async () => {
-    if (streamRef.current) return true;
+    if (localStream.current) return true;
     try {
       const s = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
-      streamRef.current = s;
-      if (myVideo.current) myVideo.current.srcObject = s;
+      localStream.current = s;
       return true;
     } catch {
       setStatus("no-camera");
@@ -47,16 +61,22 @@ export default function VideoCall() {
     }
   };
 
-  const showRemote = (remoteStream) => {
-    if (theirVideo.current) theirVideo.current.srcObject = remoteStream;
-    setStatus("incall");
+  const showRemote = (stream) => {
+    remoteStream.current = stream;
+    // Attach immediately if refs are ready
+    if (theirVideo.current) theirVideo.current.srcObject = stream;
+    if (myVideo.current && localStream.current)
+      myVideo.current.srcObject = localStream.current;
+    setStatus("incall"); // triggers useEffect above as a fallback
     setIncomingCall(null);
   };
 
   const endCall = () => {
     callRef.current?.close();
     callRef.current = null;
+    remoteStream.current = null;
     if (theirVideo.current) theirVideo.current.srcObject = null;
+    if (myVideo.current) myVideo.current.srcObject = null;
     setStatus("ready");
   };
 
@@ -65,7 +85,7 @@ export default function VideoCall() {
     const ok = await getCamera();
     if (!ok) return;
     setStatus("calling");
-    const c = peerRef.current.call(theirId.trim(), streamRef.current);
+    const c = peerRef.current.call(theirId.trim(), localStream.current);
     callRef.current = c;
     c.on("stream", showRemote);
     c.on("close", endCall);
@@ -76,7 +96,7 @@ export default function VideoCall() {
     if (!ok) return;
     const c = incomingCall.call;
     callRef.current = c;
-    c.answer(streamRef.current);
+    c.answer(localStream.current);
     c.on("stream", showRemote);
     c.on("close", endCall);
   };
@@ -97,7 +117,7 @@ export default function VideoCall() {
       {status === "no-camera" && (
         <div className="bg-red-900/40 border border-red-500/40 rounded-lg p-3 mb-2">
           <p className="text-red-400 text-xs">
-            ❌ Camera/mic blocked. Allow access in browser settings and refresh.
+            ❌ Camera/mic blocked. Allow in browser settings and refresh.
           </p>
         </div>
       )}
@@ -150,49 +170,50 @@ export default function VideoCall() {
         </div>
       )}
 
-      {/* Videos — full width, tall, clearly separated, no overlap */}
-      {status === "incall" && (
-        <div className="flex flex-col gap-2 mb-2">
-          {/* Remote */}
-          <div className="w-full rounded-lg overflow-hidden bg-black border border-gray-600">
-            <div className="px-2 py-1 bg-gray-800 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
-              <span className="text-xs text-white font-semibold">Remote</span>
-            </div>
-            <video
-              ref={theirVideo}
-              autoPlay
-              playsInline
-              style={{
-                width: "100%",
-                height: "160px",
-                objectFit: "cover",
-                display: "block",
-              }}
-            />
+      {/* Videos — rendered first so refs exist, hidden until incall */}
+      <div
+        style={{ display: status === "incall" ? "flex" : "none" }}
+        className="flex-col gap-2 mb-2"
+      >
+        {/* Remote */}
+        <div className="w-full rounded-lg overflow-hidden bg-black border border-gray-600">
+          <div className="px-2 py-1 bg-gray-800 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
+            <span className="text-xs text-white font-semibold">Remote</span>
           </div>
-
-          {/* You */}
-          <div className="w-full rounded-lg overflow-hidden bg-black border border-gray-600">
-            <div className="px-2 py-1 bg-gray-800 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
-              <span className="text-xs text-white font-semibold">You</span>
-            </div>
-            <video
-              ref={myVideo}
-              autoPlay
-              muted
-              playsInline
-              style={{
-                width: "100%",
-                height: "160px",
-                objectFit: "cover",
-                display: "block",
-              }}
-            />
-          </div>
+          <video
+            ref={theirVideo}
+            autoPlay
+            playsInline
+            style={{
+              width: "100%",
+              height: "160px",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
         </div>
-      )}
+
+        {/* You */}
+        <div className="w-full rounded-lg overflow-hidden bg-black border border-gray-600">
+          <div className="px-2 py-1 bg-gray-800 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
+            <span className="text-xs text-white font-semibold">You</span>
+          </div>
+          <video
+            ref={myVideo}
+            autoPlay
+            muted
+            playsInline
+            style={{
+              width: "100%",
+              height: "160px",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        </div>
+      </div>
 
       {status === "incall" && (
         <button
