@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Peer from "peerjs";
 
-export default function VideoCall() {
+export default function VideoCall({ socket, roomId }) {
   const [myId,    setMyId]    = useState("");
   const [theirId, setTheirId] = useState("");
   const [copied,  setCopied]  = useState(false);
@@ -27,12 +27,25 @@ export default function VideoCall() {
     };
   }, []);
 
-  // ── Attach streams every time status becomes "incall" ──────────
-  // Runs for BOTH caller and receiver — guarantees videos show up
+  // ── Listen for "call-ended" from the other person via socket ───
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on("video-end", () => {
+      // Other person ended the call — clean up our side too
+      stopLocalCamera();
+      remoteStream.current = null;
+      if (theirVideo.current) theirVideo.current.srcObject = null;
+      if (myVideo.current)    myVideo.current.srcObject    = null;
+      setStatus("ready");
+    });
+
+    return () => socket.off("video-end");
+  }, [socket]);
+
+  // ── Re-attach streams when status becomes incall ────────────────
   useEffect(() => {
     if (status !== "incall") return;
-
-    // Small delay to ensure video elements are rendered
     const timer = setTimeout(() => {
       if (myVideo.current && localStream.current) {
         myVideo.current.srcObject = localStream.current;
@@ -43,9 +56,14 @@ export default function VideoCall() {
         theirVideo.current.play().catch(() => {});
       }
     }, 100);
-
     return () => clearTimeout(timer);
   }, [status]);
+
+  // ── Stop camera helper ─────────────────────────────────────────
+  const stopLocalCamera = () => {
+    localStream.current?.getTracks().forEach((t) => t.stop());
+    localStream.current = null;
+  };
 
   // ── Get camera ─────────────────────────────────────────────────
   const getCamera = async () => {
@@ -60,41 +78,39 @@ export default function VideoCall() {
     }
   };
 
-  // ── Attach remote stream + trigger re-render ───────────────────
+  // ── Show remote stream ─────────────────────────────────────────
   const showRemote = (stream) => {
     remoteStream.current = stream;
-
-    // Try attaching immediately
     if (theirVideo.current) {
       theirVideo.current.srcObject = stream;
       theirVideo.current.play().catch(() => {});
     }
-    // Also attach local (important for the RECEIVER side)
     if (myVideo.current && localStream.current) {
       myVideo.current.srcObject = localStream.current;
       myVideo.current.play().catch(() => {});
     }
-
-    setStatus("incall"); // triggers useEffect as a safety fallback
+    setStatus("incall");
     setIncomingCall(null);
   };
 
-  // ── End call ───────────────────────────────────────────────────
+  // ── End call — notify other person via socket ──────────────────
   const endCall = () => {
     callRef.current?.close();
     callRef.current = null;
 
-    // Stop all camera/mic tracks — this turns OFF the camera indicator
-    localStream.current?.getTracks().forEach((t) => t.stop());
-    localStream.current = null; // reset so getCamera() works on next call
+    // Tell the other person in the room to also end their call
+    if (socket && roomId) {
+      socket.emit("video-end", { roomId });
+    }
 
+    stopLocalCamera();
     remoteStream.current = null;
     if (theirVideo.current) theirVideo.current.srcObject = null;
     if (myVideo.current)    myVideo.current.srcObject    = null;
     setStatus("ready");
   };
 
-  // ── Caller starts the call ─────────────────────────────────────
+  // ── Start call ─────────────────────────────────────────────────
   const startCall = async () => {
     if (!theirId.trim() || !peerRef.current) return;
     const ok = await getCamera();
@@ -106,26 +122,18 @@ export default function VideoCall() {
     c.on("close",  endCall);
   };
 
-  // ── Receiver accepts the call ──────────────────────────────────
+  // ── Accept incoming call ───────────────────────────────────────
   const acceptCall = async () => {
-    const ok = await getCamera(); // get camera FIRST
+    const ok = await getCamera();
     if (!ok) return;
-
     const c = incomingCall.call;
     callRef.current = c;
-
-    // Answer with our local stream so caller sees us
     c.answer(localStream.current);
-
-    // When caller's stream arrives → show both videos
-    c.on("stream", (stream) => {
-      showRemote(stream); // this handles both remote + local display
-    });
-
-    c.on("close", endCall);
+    c.on("stream", (stream) => { showRemote(stream); });
+    c.on("close",  endCall);
   };
 
-  // ── Receiver declines ──────────────────────────────────────────
+  // ── Decline incoming call ──────────────────────────────────────
   const declineCall = () => {
     incomingCall?.call.close();
     setIncomingCall(null);
@@ -187,36 +195,23 @@ export default function VideoCall() {
 
       {/* Always in DOM so refs are always valid */}
       <div style={{ display: status === "incall" ? "flex" : "none" }} className="flex-col gap-2 mb-2">
-
-        {/* Remote */}
         <div className="w-full rounded-lg overflow-hidden bg-black border border-gray-600">
           <div className="px-2 py-1 bg-gray-800 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
             <span className="text-xs text-white font-semibold">Remote</span>
           </div>
-          <video
-            ref={theirVideo}
-            autoPlay
-            playsInline
-            style={{ width: "100%", height: "160px", objectFit: "cover", display: "block" }}
-          />
+          <video ref={theirVideo} autoPlay playsInline
+            style={{ width: "100%", height: "160px", objectFit: "cover", display: "block" }} />
         </div>
 
-        {/* You */}
         <div className="w-full rounded-lg overflow-hidden bg-black border border-gray-600">
           <div className="px-2 py-1 bg-gray-800 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
             <span className="text-xs text-white font-semibold">You</span>
           </div>
-          <video
-            ref={myVideo}
-            autoPlay
-            muted
-            playsInline
-            style={{ width: "100%", height: "160px", objectFit: "cover", display: "block" }}
-          />
+          <video ref={myVideo} autoPlay muted playsInline
+            style={{ width: "100%", height: "160px", objectFit: "cover", display: "block" }} />
         </div>
-
       </div>
 
       {status === "incall" && (

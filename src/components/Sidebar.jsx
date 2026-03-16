@@ -32,37 +32,26 @@ const Sidebar = ({
       role="complementary"
       aria-label="Sidebar Navigation"
     >
-      {/* Scrollable content area — everything except Leave Room */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-        {/* Room Info */}
         <RoomInfo roomId={roomId} />
-
-        {/* User List */}
         <UserList users={users} typing={typing} />
-
-        {/* Language Selector */}
         <LanguageSelector
           language={language}
           setLanguage={setLanguage}
           roomId={roomId}
         />
-
-        {/* Whiteboard Button */}
         <button
           onClick={toggleWhiteboard}
           className="w-full py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-center font-semibold shadow-lg"
         >
           {showWhiteBoard ? "Close Whiteboard" : "Open Whiteboard"}
         </button>
-
-        {/* Voice Call */}
         <VoiceChat roomId={roomId} userName={userName} socket={socket} />
 
-        {/* Video Call */}
-        <VideoCall />
+        {/* Pass socket and roomId so VideoCall can notify the other person */}
+        <VideoCall socket={socket} roomId={roomId} />
       </div>
 
-      {/* Leave Room — always pinned at bottom, never hidden */}
       <div className="p-4 border-t border-gray-700 flex-shrink-0">
         <LeaveRoom
           setJoined={setJoined}
